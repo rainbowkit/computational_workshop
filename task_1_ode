@@ -1,0 +1,234 @@
+import numpy as np
+import sympy
+import pandas as pd
+
+from sympy.abc import x
+
+# Строит массив многочленов Якоби
+# k - верхний индекс у многочлена Якоби
+# n - степень многочлена
+# x - точка, в которой вычисляется значение
+def PolyJacobi(k, n):
+    p_j = [x] * (n + 1)
+
+    for j in range(n + 1):
+        if j == 0:
+            p_j[j] = 1
+        elif j == 1:
+            p_j[j] = (1 + k) * x
+        else:
+            p_j[j] = (((2*j + k - 1)*(2*j + 2*k - 3)*x*p_j[j-1] - j*(j + k - 1)*(2*j + 2*k - 2)*p_j[j-2]) / (j*(2*j + 2*k - 2)))
+    return p_j
+
+# Строит массивы координатных функций и их производных
+def Basis(k, n):
+    phi = [x] * (n)
+    first_derivative = [x] * (n)
+    second_derivative = [x] * (n)
+
+
+    jacobi = PolyJacobi(k, n)
+    jacobi_derivative = PolyJacobi(k - 1, n + 1)
+
+    for i in range(n):
+        phi[i] = (1 - x ** 2) * jacobi[i]
+        phi[i] = sympy.simplify(phi[i])
+
+        first_derivative[i] = (-2) * (i + 1) * (1 - x ** 2) ** (k - 1) * jacobi_derivative[i + 1]
+        first_derivative[i] = sympy.simplify(first_derivative[i])
+
+        temp_0 = (k - 1) * (1 - x ** 2) ** (k - 2) * jacobi_derivative[i + 1]
+        temp_1 = (1 - x ** 2) ** (k - 1) * ((i + 1 + 2 * (k - 1) + 1) / 2) * jacobi[i]
+        second_derivative[i] = (-2) * (i + 1) * (temp_0 + temp_1)
+        second_derivative[i] = sympy.simplify(second_derivative[i])
+
+    return phi, first_derivative, second_derivative
+
+# Строит массив значений многочленов Якоби в точке y
+def PolyValues(k, n, y):
+    poly_y = [0] * (n + 1)
+    for j in range(n + 1):
+        if j == 0:
+            poly_y[j] = 1
+        elif j == 1:
+            poly_y[j] = (1 + k) * y
+        else:
+            poly_y[j] = (((j + k) * (2 * (j - 2) + 2 * k + 3) * y * poly_y[j - 1] - (j + k) * (j + k - 1) * poly_y[j - 2]) / ((j + 2 * k) * j))
+    return poly_y
+
+# Строит массивы значений координатных функций и их производных
+def BasisValues(k, n, y):
+    phi = [0] * n
+    first_derivative = [0] * n
+    second_derivative = [0] * n
+
+    jacobi = PolyValues(k, n, y)
+    jacobi_derivative = PolyValues(k - 1, n + 1, y)
+    for i in range(n):
+        phi[i] = (1 - y ** 2) * jacobi[i]
+
+        first_derivative[i] = (-2) * (i + 1) * (1 - y ** 2) ** (k - 1) * jacobi_derivative[i + 1]
+
+# Метод Ритца
+def RitzMethod(k, n):
+    pols = PolyJacobi(k, n)
+    phis, dphis, ddphis = Basis(k, n)
+
+    A = np.zeros((n, n))
+    b = np.zeros((n, 1))
+
+    x = sympy.symbols('x')
+    f = 2 - x
+
+    for i in range(3):
+        h = f * phis[i]
+        b[i] = sympy.integrals.integrate(h, (x, -1, 1))
+
+    x1 = 1 / 3 * np.sqrt(5 - 2 * np.sqrt(10 / 7))
+    x2 = 1 / 3 * np.sqrt(5 + 2 * np.sqrt(10 / 7))
+    c1 = (322 + 13 * np.sqrt(70)) / 900
+    c2 = (322 - 13 * np.sqrt(70)) / 900
+    x_i = [-x2, -x1, 0, x1, x2]
+    c_i = [c2, c1, 128 / 225, c1, c2]
+
+    arr = [BasisValues(k, n, x_i[i]) for i in range(5)]
+
+    # Вычисление интеграла по формуле Гаусса
+    def Gauss(nodes, coefs, i, j):
+        s = 0
+        for k in range(len(nodes)):
+            tmp_1 = (((nodes[k] + 4) / (nodes[k] + 5)) * arr[k][1][j] * arr[k][1][i] + np.exp(nodes[k]**4/4) * arr[k][0][i] * arr[k][0][j])
+            s += coefs[k] * tmp_1
+        return s
+
+    for i in range(n):
+        for j in range(n):
+            A[i][j] = Gauss(x_i, c_i, i, j)
+
+    coeffs = np.linalg.solve(A, b)
+
+    return coeffs, A, b
+        temp_0 = (1 - y ** 2) ** (k - 2) * (k - 1) * jacobi_derivative[i + 1]
+        temp_1 = (1 - y ** 2) ** (k - 1) * ((i + 1 + 2 * (k - 1) + 1) / 2) * jacobi_derivative[i]
+        second_derivative[i] = (-2) * (i + 1) * (temp_0 + temp_1)
+
+    return phi, first_derivative, second_derivative
+
+# Строит узлы многочлена Чебышева первого рода
+def Cheb_nodes(n, a, b):
+    cheb_nodes = [(1 / 2) * (a + b) + (1 / 2) * (b - a) * np.cos((2 * i - 1) * np.pi / (2 * n)) for i in range(1, n + 1)]
+    return cheb_nodes
+
+# Метод коллокации
+def CollocationsMethod(k, n):
+    # Генерируем узлы метода коллокации с помощью Чебышева
+    nodes = Cheb_nodes(n, -1, 1)
+    # Функции, которые представляют правую часть дифура и коэффициенты при производных в уравнении
+    f = lambda x: 2 - x
+    p = lambda x: (x + 4) / (x + 5)
+    dp = lambda x: 1 / (x + 5) ** 2
+    r = lambda x: np.exp(x**4/4)
+
+    # Матрица и вектор для построения системы линейных уравнений метода коллокации
+    A = np.zeros((n, n))
+    b = np.zeros((n, 1))
+
+    # Вычисляем значение правой части диффура в узле
+    # Вычисляем значения координатных функций и их производных в узле
+    for i in range(n):
+        b[i] = f(nodes[i])
+        phi, first_derivative, second_derivative = BasisValues(k, n, nodes[i])
+        for j in range(n):
+            # Вычисляем значения произведения и второй, первой производной и координатной функции в узле
+            temp_0 = p(nodes[i]) * second_derivative[j]
+            temp_1 = dp(nodes[i]) * first_derivative[j]
+            temp_2 = r(nodes[i]) * phi[j]
+            A[i][j] = (-1) * (temp_0 + temp_1) + temp_2
+
+    # Решаем систему линейных уравнений, чтобы найти коэффициенты приближенного решения
+    coeffs = np.linalg.solve(A, b)
+
+    return coeffs, A, b
+
+# Сравнивает с точным решением
+def final_solution(coeffs, dots):
+    dot1, dot2, dot3 = dots[0], dots[1], dots[2]
+
+    exact_value = [0.721373, 0.813764, 0.541390]
+    res = [0.0] * 3
+    n = len(coeffs)
+
+    phi_dot1 = BasisValues(1, n, dot1)[0]
+    phi_dot2 = BasisValues(1, n, dot2)[0]
+    phi_dot3 = BasisValues(1, n, dot3)[0]
+
+    for i in range(3):
+        res[0] += coeffs[i] * phi_dot1[i]
+        res[1] += coeffs[i] * phi_dot2[i]
+        res[2] += coeffs[i] * phi_dot3[i]
+
+    errors = [exact_value[k] - res[k] for k in range(3)]
+    final = [np.round(res[0], 5),
+           np.round(res[1], 5),
+           np.round(res[2], 5),
+           np.round(errs[0], 5),
+           np.round(errs[1], 5),
+           np.round(errs[2], 5)]
+
+    return final
+
+# Строит таблицу по значениям
+def make_table(values):
+    column = [
+        "y(-0.5)",
+        "y(0)",
+        "y(0.5)",
+        "y* - y(-0.5)",
+        "y* - y(0)",
+        "y* - y(0.5)"
+    ]
+    indexes = [3, 4, 5, 6, 7]
+    table = pd.DataFrame(data = values, columns=column, index=indexes)
+    table.columns.name = "n"
+    return(table)
+
+# Строим таблицу результатов для метода Ритца
+
+dots = [-0.5, 0.0, 0.5]
+CoeffRitz = []
+coeffs, A, b = [], [], []
+
+for i in range(3, 8):
+    coeffs, A, b = RitzMethod(1, i)
+    CoeffRitz.append(final_solution(coeffs, dots))
+
+result_table = make_table(CoeffRitz)
+
+print("Метод Ритца \n")
+print("Расширенная матрица системы: \n")
+print("А = ", A, "\n")
+print("Число обусловленности матрицы А = ", np.linalg.cond(A), "\n")
+print("b = ", b, "\n")
+print("Коэффициенты разложения приближенного решения по координатным функциям:\n", coeffs)
+
+result_table
+
+# Строим таблицу результатов для метода коллокации
+dots = [-0.5, 0.0, 0.5]
+CoeffColloc = []
+coeffs, A, b = [], [], []
+
+for i in range(3, 8):
+    coeffs, A, b = CollocationsMethod(1, i)
+    CoeffColloc.append(final_solution(coeffs, dots))
+
+result_table = make_table(CoeffColloc)
+
+print("Метод коллокации \n")
+print("Расширенная матрица системы: \n")
+print("А = ", A, "\n")
+print("Число обусловленности матрицы А = ", np.linalg.cond(A), "\n")
+print("b = ", b, "\n")
+print("Коэффициенты разложения приближенного решения по координатным функциям:\n", coeffs)
+
+result_table
