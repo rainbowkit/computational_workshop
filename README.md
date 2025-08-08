@@ -11,3 +11,9 @@ $\displaystyle u(-1)=u'(1)=0$
 Координатная система: $(1+x), (1-x^2)P_i^{(1,1)}(x)$
 
 3) Метод коллокации
+
+# Задание 2
+
+$\displaystyle -\left( \frac{1}{2+x/3} u' \right)' + (e^{x/5})u = \lambda u$
+
+$\displaystyle u'(-1) - 0.7u(-1) = u'(1) + 0.75u(1) = 0$
